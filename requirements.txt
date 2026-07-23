@@ -10,3 +10,5 @@ python-docx>=1.1
 elevenlabs>=1.0
 schemdraw>=0.19
 rdkit>=2024.3
+playwright>=1.45
+imageio-ffmpeg>=0.5

@@ -7,10 +7,9 @@ __pycache__/
 .venv/
 venv/
 
-# Node / Remotion
+# Node / render build output
 render/node_modules/
-render/public/
-render/out/
+render/dist/
 
 # Generated job output (audio, video, diagrams — large, per-run, not source)
 jobs/*/

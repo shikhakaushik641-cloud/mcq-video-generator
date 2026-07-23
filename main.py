@@ -3,7 +3,7 @@
 Pipeline per question: structure raw text into JSON (AI) -> REVIEW GATE
 (content lead edits/approves, sees the diagram rendered live) -> narrate
 (ElevenLabs) + render diagram stages (schemdraw/RDKit) + render video
-(Remotion).
+(Playwright + ffmpeg).
 
 Runs on http://localhost:7864
 """

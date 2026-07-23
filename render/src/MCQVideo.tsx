@@ -1,21 +1,36 @@
 import React from "react";
-import {
-  AbsoluteFill,
-  Audio,
-  Img,
-  Sequence,
-  interpolate,
-  staticFile,
-  useCurrentFrame,
-  useVideoConfig,
-} from "remotion";
 import { BlockMath } from "react-katex";
-import "katex/dist/katex.min.css";
+// katex.min.css is loaded via a <link> tag in the per-job HTML (see
+// services/frame_capture.py) instead of an import here — esbuild bundling
+// the CSS import would need loaders configured for every font format KaTeX
+// ships (.woff/.woff2/.ttf), and there's no benefit to inlining it.
 import type { MCQProps, PanelItem } from "./types";
 
 const secondsToFrames = (s: number, fps: number) => Math.max(1, Math.round(s * fps));
 
-const assetSrc = (p: string) => (p.startsWith("/") || p.includes("://") ? p : staticFile(p));
+/** Remotion's interpolate(): linear map from one range to another, clamped
+ * on both ends (this project only ever uses clamped interpolation). */
+const interpolate = (
+  frame: number,
+  input: [number, number],
+  output: [number, number],
+): number => {
+  const [inMin, inMax] = input;
+  const [outMin, outMax] = output;
+  if (frame <= inMin) return outMin;
+  if (frame >= inMax) return outMax;
+  const t = (frame - inMin) / (inMax - inMin);
+  return outMin + t * (outMax - outMin);
+};
+
+const AbsoluteFill: React.FC<{ style?: React.CSSProperties; children?: React.ReactNode }> = ({
+  style,
+  children,
+}) => (
+  <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, ...style }}>
+    {children}
+  </div>
+);
 
 const ANNOTATION_FONT = "'Lucida Handwriting', cursive";
 const ANNOTATION_SIZE = 19;
@@ -32,10 +47,7 @@ const HandwrittenText: React.FC<{ text: string; localFrame: number; frames: numb
   frames,
 }) => {
   const writeFrames = Math.max(1, Math.min(frames * 0.6, text.length * 2.2));
-  const progress = interpolate(localFrame, [0, writeFrames], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
+  const progress = interpolate(localFrame, [0, writeFrames], [0, 1]);
   return <>{text.slice(0, Math.round(text.length * progress))}</>;
 };
 
@@ -68,8 +80,8 @@ const AnnotatedQuestionText: React.FC<{
   keyPhrases: string[];
   questionFrom: number;
   questionFrames: number;
-}> = ({ text, keyPhrases, questionFrom, questionFrames }) => {
-  const frame = useCurrentFrame();
+  frame: number;
+}> = ({ text, keyPhrases, questionFrom, questionFrames, frame }) => {
   const parts = splitOnPhrases(text, keyPhrases);
   const n = parts.filter((p) => p.phraseIndex !== undefined).length;
   if (n === 0) return <>{text}</>;
@@ -82,10 +94,7 @@ const AnnotatedQuestionText: React.FC<{
         }
         const t = n === 1 ? 0.3 : 0.15 + (0.7 * part.phraseIndex) / (n - 1);
         const revealFrame = questionFrom + Math.round(questionFrames * t);
-        const progress = interpolate(frame, [revealFrame, revealFrame + 15], [0, 1], {
-          extrapolateLeft: "clamp",
-          extrapolateRight: "clamp",
-        });
+        const progress = interpolate(frame, [revealFrame, revealFrame + 15], [0, 1]);
         return (
           <span key={i} style={{ position: "relative", display: "inline-block" }}>
             {part.text}
@@ -111,11 +120,12 @@ const AnnotatedQuestionText: React.FC<{
   );
 };
 
-const QuestionPanel: React.FC<{ props: MCQProps; questionFrom: number; questionFrames: number }> = ({
-  props,
-  questionFrom,
-  questionFrames,
-}) => (
+const QuestionPanel: React.FC<{
+  props: MCQProps;
+  questionFrom: number;
+  questionFrames: number;
+  frame: number;
+}> = ({ props, questionFrom, questionFrames, frame }) => (
   <div style={{ flex: 1, padding: 48, fontFamily: "Georgia, serif", fontSize: 28, color: "#111" }}>
     <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 16 }}>[MCQ]</div>
     <div style={{ marginBottom: 32, lineHeight: 1.4 }}>
@@ -125,6 +135,7 @@ const QuestionPanel: React.FC<{ props: MCQProps; questionFrom: number; questionF
         keyPhrases={props.question.keyPhrases}
         questionFrom={questionFrom}
         questionFrames={questionFrames}
+        frame={frame}
       />
     </div>
     {props.question.options.map((opt, i) => (
@@ -165,20 +176,17 @@ const DiagramStages: React.FC<{ images: string[]; localFrame: number; frames: nu
   const perStage = frames / images.length;
   const stageIndex = Math.min(images.length - 1, Math.floor(localFrame / perStage));
   const stageLocalFrame = localFrame - stageIndex * perStage;
-  const opacity = interpolate(stageLocalFrame, [0, 10], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
+  const opacity = interpolate(stageLocalFrame, [0, 10], [0, 1]);
   return (
     <div style={{ position: "relative", width: "100%", height: 260 }}>
       {stageIndex > 0 && (
-        <Img
-          src={assetSrc(images[stageIndex - 1])}
+        <img
+          src={images[stageIndex - 1]}
           style={{ position: "absolute", width: "100%", height: "100%", objectFit: "contain" }}
         />
       )}
-      <Img
-        src={assetSrc(images[stageIndex])}
+      <img
+        src={images[stageIndex]}
         style={{
           position: "absolute",
           width: "100%",
@@ -196,10 +204,7 @@ const PanelItemView: React.FC<{ item: PanelItem; localFrame: number; frames: num
   localFrame,
   frames,
 }) => {
-  const opacity = interpolate(localFrame, [0, 10], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
+  const opacity = interpolate(localFrame, [0, 10], [0, 1]);
   const annotationStyle: React.CSSProperties = {
     color: ANNOTATION_COLOR,
     fontFamily: ANNOTATION_FONT,
@@ -249,9 +254,8 @@ const PanelItemView: React.FC<{ item: PanelItem; localFrame: number; frames: num
   );
 };
 
-export const MCQVideo: React.FC<MCQProps> = (props) => {
-  const { fps } = useVideoConfig();
-  const frame = useCurrentFrame();
+export const MCQVideo: React.FC<MCQProps & { frame: number }> = (props) => {
+  const { fps, width, height, frame } = props;
   const introFrames = secondsToFrames(props.intro.audio.durationS, fps);
   const questionFrames = secondsToFrames(props.question.audio.durationS, fps);
   const questionFrom = introFrames;
@@ -267,25 +271,13 @@ export const MCQVideo: React.FC<MCQProps> = (props) => {
   // All layout below is authored in a fixed 1280x720 logical box and scaled
   // up to fill whatever the actual output resolution is (e.g. 1920x1080),
   // rather than rewriting every hardcoded px value proportionally.
-  const { width, height } = useVideoConfig();
   const scale = Math.min(width / 1280, height / 720);
 
   return (
-    <AbsoluteFill style={{ backgroundColor: "#ffffff" }}>
-      <Sequence from={0} durationInFrames={introFrames} layout="none">
-        <Audio src={assetSrc(props.intro.audio.path)} />
-      </Sequence>
-      <Sequence from={questionFrom} durationInFrames={questionFrames} layout="none">
-        <Audio src={assetSrc(props.question.audio.path)} />
-      </Sequence>
-      {panelItems.map(({ item, from, frames, key }) => (
-        <Sequence key={key} from={from} durationInFrames={frames} layout="none">
-          <Audio src={assetSrc(item.audio.path)} />
-        </Sequence>
-      ))}
+    <AbsoluteFill style={{ backgroundColor: "#ffffff", width, height }}>
       <div style={{ width: 1280, height: 720, transform: `scale(${scale})`, transformOrigin: "top left" }}>
         <AbsoluteFill style={{ display: "flex", flexDirection: "row" }}>
-          <QuestionPanel props={props} questionFrom={questionFrom} questionFrames={questionFrames} />
+          <QuestionPanel props={props} questionFrom={questionFrom} questionFrames={questionFrames} frame={frame} />
           <div style={{ flex: 1, padding: 48, display: "flex", flexDirection: "column" }}>
             {panelItems
               .filter(({ from }) => frame >= from)

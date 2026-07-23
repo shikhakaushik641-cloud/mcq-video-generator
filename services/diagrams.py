@@ -8,8 +8,8 @@ arbitrary schematics.
 
 Rendering is staged: schemdraw is called multiple times with progressively
 more of the spec included (wires only -> components -> labelled values),
-producing a short sequence of static images that Remotion crossfades
-between, instead of a hand-built animated SVG renderer.
+producing a short sequence of static images that the video composition
+crossfades between, instead of a hand-built animated SVG renderer.
 """
 
 from pathlib import Path
@@ -122,7 +122,7 @@ def _draw_circuit(spec: dict, stage: str) -> schemdraw.Drawing:
 
 def render_circuit_stages(spec: dict, out_dir: str | Path, prefix: str = "circuit") -> list[str]:
     """Render the wires -> components -> labelled progression. Returns SVG paths in
-    order (Remotion renders SVG natively, so there's no need to rasterize)."""
+    order (the composition's <img> tags load SVG natively, so there's no need to rasterize)."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     paths = []
