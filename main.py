@@ -10,6 +10,8 @@ Runs on http://localhost:7864
 
 import io
 import json
+import os
+import secrets
 import shutil
 import threading
 import uuid
@@ -17,9 +19,10 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from PIL import Image
 
 load_dotenv()
@@ -32,7 +35,24 @@ from services.split import split_questions
 from services.structure import IMAGE_ONLY_PLACEHOLDER, structure_question
 from services.tts import DEFAULT_VOICE_ID, list_voices
 
-app = FastAPI(title="MCQ Video Generator")
+# Only enforced when deployed with APP_PASSWORD set (e.g. on a public host) —
+# local dev over localhost stays password-free.
+_basic_auth = HTTPBasic(auto_error=False)
+
+
+def require_auth(credentials: HTTPBasicCredentials = Depends(_basic_auth)) -> None:
+    app_password = os.getenv("APP_PASSWORD")
+    if not app_password:
+        return
+    app_username = os.getenv("APP_USERNAME", "pw")
+    valid = credentials is not None and secrets.compare_digest(
+        credentials.username, app_username
+    ) and secrets.compare_digest(credentials.password, app_password)
+    if not valid:
+        raise HTTPException(status_code=401, detail="Unauthorized", headers={"WWW-Authenticate": "Basic"})
+
+
+app = FastAPI(title="MCQ Video Generator", dependencies=[Depends(require_auth)])
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 BASE_DIR = Path(__file__).parent
@@ -238,4 +258,4 @@ def app_ui():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=7864)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 7864)))

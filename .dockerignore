@@ -1,0 +1,12 @@
+.env
+jobs/*
+!jobs/.gitkeep
+testdata/
+render/node_modules/
+render/dist/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.git/
+.claude/

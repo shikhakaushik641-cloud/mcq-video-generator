@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: mcq-video-generator
+    runtime: docker
+    plan: standard
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+      - key: AZURE_OPENAI_KEY
+        sync: false
+      - key: AZURE_OPENAI_DEPLOYMENT
+        sync: false
+      - key: AZURE_OPENAI_API_VERSION
+        value: "2025-01-01-preview"
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_VOICE_ID
+        sync: false
+      - key: APP_USERNAME
+        value: pw
+      - key: APP_PASSWORD
+        sync: false

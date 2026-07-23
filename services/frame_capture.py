@@ -19,19 +19,6 @@ from playwright.async_api import async_playwright
 RENDER_DIR = Path(__file__).parent.parent / "render"
 
 
-def chrome_executable() -> str:
-    """Reuse the Playwright-cached headless-shell binary — Remotion's own
-    browser auto-download fails in this environment, and this exact binary
-    was already proven to work for the old Remotion pipeline."""
-    cache_dir = Path.home() / "AppData" / "Local" / "ms-playwright"
-    for d in sorted(cache_dir.iterdir()):
-        if d.name.startswith("chromium_headless_shell-"):
-            candidate = d / "chrome-headless-shell-win64" / "chrome-headless-shell.exe"
-            if candidate.exists():
-                return str(candidate)
-    raise RuntimeError("no cached chrome-headless-shell binary found under ms-playwright")
-
-
 def total_frames(props: dict) -> int:
     """Mirrors render/src/Root.tsx's old totalFrames() — sum of every
     segment's own duration converted to frames, each segment at least 1
@@ -116,7 +103,7 @@ async def _capture_all_async(
     ]
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(executable_path=chrome_executable(), headless=True)
+        browser = await p.chromium.launch(headless=True)
         try:
             await asyncio.gather(*[
                 _capture_range(browser, html_url, start, end, frames_dir,
