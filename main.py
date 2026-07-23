@@ -231,6 +231,11 @@ def index():
     return (BASE_DIR / "static" / "index.html").read_text(encoding="utf-8")
 
 
+@app.get("/app", response_class=HTMLResponse)
+def app_ui():
+    return (BASE_DIR / "static" / "app.html").read_text(encoding="utf-8")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=7864)

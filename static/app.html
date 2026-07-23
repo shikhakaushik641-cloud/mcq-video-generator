@@ -1,0 +1,300 @@
+<title>MCQ Video Generator</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 1000px; margin: 40px auto; padding: 0 20px; color: #222; }
+  h1 { font-size: 22px; }
+  h2 { font-size: 17px; margin-top: 36px; }
+  textarea { width: 100%; box-sizing: border-box; font-family: monospace; font-size: 13px; }
+  button { padding: 8px 16px; font-size: 14px; cursor: pointer; margin-right: 8px; }
+  #log { background: #f5f5f5; padding: 10px; font-size: 12px; max-height: 150px; overflow-y: auto; white-space: pre-wrap; }
+  .status { display: inline-block; padding: 3px 10px; border-radius: 10px; background: #eee; font-size: 12px; font-weight: 600; }
+  .row { display: flex; gap: 24px; margin-top: 16px; }
+  .col { flex: 1; }
+  img#diagramPreview { max-width: 100%; border: 1px solid #ddd; }
+  video { max-width: 100%; }
+  #errorBox { color: #b00020; white-space: pre-wrap; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+  tr.selectable { cursor: pointer; }
+  tr.selectable:hover { background: #f7f7f7; }
+  .badge { padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 600; background: #eee; }
+  .badge.review { background: #fff3cd; }
+  .badge.done { background: #d4edda; }
+  .badge.error { background: #f8d7da; }
+  #pasteZone {
+    border: 2px dashed #bbb; border-radius: 8px; padding: 20px; text-align: center;
+    color: #777; font-size: 13px; cursor: text; outline: none; user-select: none;
+  }
+  #pasteZone:focus { border-color: #666; color: #444; background: #fafafa; }
+  #pasteZone.has-image { border-style: solid; border-color: #ddd; padding: 8px; text-align: left; }
+</style>
+
+<h1>MCQ Video Generator</h1>
+
+<section id="submitSection">
+  <p>Paste a single raw question (text extracted from a doc/PDF — options, answer key, and diagram description if any):</p>
+  <textarea id="rawText" rows="8" placeholder="Q. Find the voltage across capacitors...&#10;(A) ...&#10;(B) ...&#10;Answer: B"></textarea>
+  <div style="margin-top: 8px;">
+    <button onclick="submitQuestion()">Structure this question</button>
+  </div>
+</section>
+
+<section id="imageSection">
+  <h2>Or upload a single question as an image</h2>
+  <div id="pasteZone" tabindex="0">
+    Click here and paste an image (Ctrl+V) — e.g. a screenshot or copied photo of the question
+    <div><img id="imagePreviewThumb" style="display:none; max-width: 300px; margin-top: 8px; border: 1px solid #ddd;" /></div>
+  </div>
+  <div style="margin-top: 8px;">
+    <span style="font-size: 13px; color: #777;">or choose a file:</span>
+    <input type="file" id="imageFile" accept="image/*" onchange="onImageFileChosen()" />
+  </div>
+  <div style="margin-top: 8px;">
+    <button onclick="uploadImage()">Structure this image</button>
+  </div>
+  <div id="imageResult" style="margin-top: 8px; font-size: 13px;"></div>
+</section>
+
+<section id="bankSection">
+  <h2>Or upload a question bank (docx / pdf, multiple questions)</h2>
+  <input type="file" id="bankFile" accept=".docx,.doc,.pdf" />
+  <button onclick="uploadBank()">Upload &amp; split into questions</button>
+  <div id="bankResult" style="margin-top: 8px; font-size: 13px;"></div>
+</section>
+
+<section id="inboxSection">
+  <h2>Review inbox</h2>
+  <table id="inboxTable">
+    <thead><tr><th>Question</th><th>Source</th><th>Status</th></tr></thead>
+    <tbody id="inboxBody"></tbody>
+  </table>
+</section>
+
+<section id="jobSection" style="display:none; margin-top: 24px;">
+  <h2>Job <code id="jobId"></code> — <span class="status" id="jobStatus">queued</span></h2>
+  <div id="log"></div>
+  <div id="errorBox"></div>
+
+  <div id="reviewSection" style="display:none; margin-top: 20px;">
+    <h3>Review before generating the video</h3>
+    <div class="row">
+      <div class="col">
+        <p>Structured question (edit anything, then Save):</p>
+        <textarea id="structuredJson" rows="24"></textarea>
+        <div style="margin-top: 8px;">
+          <label for="voiceSelect" style="font-size: 13px;">Narration voice:</label>
+          <select id="voiceSelect"></select>
+        </div>
+        <div style="margin-top: 8px;">
+          <button onclick="saveEdits()">Save edits</button>
+          <button onclick="approve()">Approve &amp; generate video</button>
+        </div>
+      </div>
+      <div class="col">
+        <p>Live diagram preview (exactly what will render in the video):</p>
+        <img id="diagramPreview" src="" alt="no diagram" />
+      </div>
+    </div>
+  </div>
+
+  <div id="doneSection" style="display:none; margin-top: 20px;">
+    <h3>Video ready</h3>
+    <video id="videoPlayer" controls></video>
+    <div><a id="downloadLink" href="#">Download mp4</a></div>
+  </div>
+</section>
+
+<script>
+let currentJobId = null;
+let pollTimer = null;
+let inboxTimer = null;
+
+async function submitQuestion() {
+  const rawText = document.getElementById('rawText').value.trim();
+  if (!rawText) return;
+  const form = new FormData();
+  form.append('raw_text', rawText);
+  const resp = await fetch('/api/generate', { method: 'POST', body: form });
+  const data = await resp.json();
+  selectJob(data.job_id);
+  refreshInbox();
+}
+
+let selectedImageFile = null;
+
+function showImagePreview(file) {
+  selectedImageFile = file;
+  const thumb = document.getElementById('imagePreviewThumb');
+  const zone = document.getElementById('pasteZone');
+  if (!file) {
+    thumb.style.display = 'none';
+    zone.classList.remove('has-image');
+    return;
+  }
+  thumb.src = URL.createObjectURL(file);
+  thumb.style.display = 'block';
+  zone.classList.add('has-image');
+}
+
+function onImageFileChosen() {
+  const fileInput = document.getElementById('imageFile');
+  showImagePreview(fileInput.files[0] || null);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('pasteZone').addEventListener('paste', (e) => {
+    const items = e.clipboardData ? e.clipboardData.items : [];
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        showImagePreview(item.getAsFile());
+        return;
+      }
+    }
+  });
+});
+
+async function uploadImage() {
+  if (!selectedImageFile) {
+    document.getElementById('imageResult').textContent = 'Paste or choose an image first.';
+    return;
+  }
+  const form = new FormData();
+  form.append('file', selectedImageFile, selectedImageFile.name || 'pasted-image.png');
+  document.getElementById('imageResult').textContent = 'Uploading and reading the image…';
+  const resp = await fetch('/api/upload_image', { method: 'POST', body: form });
+  if (!resp.ok) {
+    document.getElementById('imageResult').textContent = 'Failed: ' + await resp.text();
+    return;
+  }
+  const data = await resp.json();
+  document.getElementById('imageResult').textContent = 'Added to the inbox below — structuring now.';
+  selectJob(data.job_id);
+  refreshInbox();
+}
+
+async function uploadBank() {
+  const fileInput = document.getElementById('bankFile');
+  if (!fileInput.files.length) return;
+  const form = new FormData();
+  form.append('file', fileInput.files[0]);
+  document.getElementById('bankResult').textContent = 'Uploading and splitting…';
+  const resp = await fetch('/api/upload_bank', { method: 'POST', body: form });
+  if (!resp.ok) {
+    document.getElementById('bankResult').textContent = 'Failed: ' + await resp.text();
+    return;
+  }
+  const data = await resp.json();
+  document.getElementById('bankResult').textContent =
+    `Found ${data.count} question(s) — added to the inbox below.`;
+  refreshInbox();
+}
+
+async function refreshInbox() {
+  if (inboxTimer) clearTimeout(inboxTimer);
+  const resp = await fetch('/api/jobs');
+  const data = await resp.json();
+  const body = document.getElementById('inboxBody');
+  body.innerHTML = '';
+  for (const job of data.jobs) {
+    const tr = document.createElement('tr');
+    tr.className = 'selectable';
+    tr.onclick = () => selectJob(job.id);
+    tr.innerHTML = `
+      <td>${escapeHtml(job.question).slice(0, 90)}</td>
+      <td>${escapeHtml(job.source)}</td>
+      <td><span class="badge ${job.status}">${job.status}</span></td>
+    `;
+    body.appendChild(tr);
+  }
+  inboxTimer = setTimeout(refreshInbox, 3000);
+}
+
+function escapeHtml(s) {
+  return (s || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function selectJob(jobId) {
+  currentJobId = jobId;
+  document.getElementById('structuredJson').dataset.loaded = '';
+  document.getElementById('doneSection').style.display = 'none';
+  document.getElementById('jobSection').style.display = 'block';
+  document.getElementById('jobId').textContent = currentJobId;
+  poll();
+}
+
+async function poll() {
+  if (pollTimer) clearTimeout(pollTimer);
+  const resp = await fetch(`/api/jobs/${currentJobId}`);
+  const job = await resp.json();
+  renderJob(job);
+  if (job.status !== 'done' && job.status !== 'error') {
+    pollTimer = setTimeout(poll, 1500);
+  }
+}
+
+function renderJob(job) {
+  document.getElementById('jobStatus').textContent = job.status;
+  document.getElementById('log').textContent = job.log.map(l => `[${l.ts}] ${l.message}`).join('\n');
+  document.getElementById('errorBox').textContent = job.error || '';
+
+  const reviewSection = document.getElementById('reviewSection');
+  const doneSection = document.getElementById('doneSection');
+
+  if (job.status === 'review') {
+    reviewSection.style.display = 'block';
+    if (!document.getElementById('structuredJson').dataset.loaded) {
+      document.getElementById('structuredJson').value = JSON.stringify(job.structured, null, 2);
+      document.getElementById('structuredJson').dataset.loaded = '1';
+      refreshDiagramPreview();
+    }
+  } else {
+    reviewSection.style.display = 'none';
+  }
+
+  if (job.status === 'done') {
+    doneSection.style.display = 'block';
+    const videoUrl = `/api/jobs/${currentJobId}/video`;
+    document.getElementById('videoPlayer').src = videoUrl;
+    document.getElementById('downloadLink').href = videoUrl;
+  }
+}
+
+function refreshDiagramPreview() {
+  document.getElementById('diagramPreview').src =
+    `/api/jobs/${currentJobId}/diagram_preview?t=${Date.now()}`;
+}
+
+async function saveEdits() {
+  const structuredJson = document.getElementById('structuredJson').value;
+  const form = new FormData();
+  form.append('structured_json', structuredJson);
+  const resp = await fetch(`/api/jobs/${currentJobId}/update`, { method: 'POST', body: form });
+  if (!resp.ok) {
+    alert('Save failed: ' + await resp.text());
+    return;
+  }
+  refreshDiagramPreview();
+  poll();
+}
+
+async function approve() {
+  await saveEdits();
+  const form = new FormData();
+  form.append('voice_id', document.getElementById('voiceSelect').value);
+  await fetch(`/api/jobs/${currentJobId}/approve`, { method: 'POST', body: form });
+  poll();
+  refreshInbox();
+}
+
+async function loadVoices() {
+  const resp = await fetch('/api/voices');
+  const data = await resp.json();
+  const select = document.getElementById('voiceSelect');
+  select.innerHTML = data.voices
+    .map(v => `<option value="${v.voice_id}">${escapeHtml(v.name)}</option>`)
+    .join('');
+}
+
+refreshInbox();
+loadVoices();
+</script>
