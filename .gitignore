@@ -1,0 +1,25 @@
+# Secrets — never commit real keys, only .env.example
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node / Remotion
+render/node_modules/
+render/public/
+render/out/
+
+# Generated job output (audio, video, diagrams — large, per-run, not source)
+jobs/*/
+!jobs/.gitkeep
+jobs/_last_ai_raw.txt
+
+# Test/scratch data generated during development
+testdata/
+
+# OS/editor
+.DS_Store
+Thumbs.db
