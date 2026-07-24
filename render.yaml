@@ -2,7 +2,7 @@ services:
   - type: web
     name: mcq-video-generator
     runtime: docker
-    plan: standard
+    plan: free
     dockerfilePath: ./Dockerfile
     healthCheckPath: /
     envVars:

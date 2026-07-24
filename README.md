@@ -44,9 +44,13 @@ container needs no extra setup step. A `render.yaml` is included for
 
 1. Sign up at render.com and connect this GitHub repo.
 2. New → Blueprint → pick this repo — it reads `render.yaml` and creates the
-   web service on the **Standard** plan (2GB RAM; Playwright + RDKit +
-   ffmpeg rendering concurrently needs more than the free/Starter tier's
-   512MB, so don't drop below Standard without testing it holds up).
+   web service on the **Free** plan (no card required). This has real
+   limits worth knowing: 512MB RAM, which is tight for Playwright + RDKit +
+   ffmpeg rendering concurrently, and the instance spins down after 15
+   minutes idle (~30-50s cold start on the next request). If rendering
+   turns out unreliable under that ceiling, bump `plan:` in `render.yaml`
+   to `standard` (2GB RAM, no idle spin-down) — that tier requires a card
+   on file.
 3. Fill in the env vars it prompts for (`ANTHROPIC_API_KEY` or the
    `AZURE_OPENAI_*` set, `ELEVENLABS_API_KEY`, and an `APP_PASSWORD` —
    every request can trigger paid AI/TTS calls, so this shouldn't be left
